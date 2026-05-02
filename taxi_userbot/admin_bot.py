@@ -33,6 +33,7 @@ dp = Dispatcher(storage=MemoryStorage())
 
 class AddKeyword(StatesGroup):
     waiting = State()
+    kw_type = State()
 
 
 
@@ -99,28 +100,38 @@ async def cb_main_menu(cb: CallbackQuery, state: FSMContext):
 async def cb_keywords(cb: CallbackQuery):
     if not is_admin(cb.from_user.id):
         return
-    kws = await get_keywords()
-    body = "\n".join(f"• `{k}`" for k in kws) if kws else "_Hali kalit so'z yo'q._"
+    yol = await get_keywords("yolovchi")
+    hay = await get_keywords("haydovchi")
+    yol_body = " ".join(f"`{k}`" for k in yol) if yol else "_yo'q_"
+    hay_body = " ".join(f"`{k}`" for k in hay) if hay else "_yo'q_"
+    text = (
+        f"🔑 *Kalit So'zlar:*\n\n"
+        f"🧍 *Yo'lovchi ({len(yol)} ta):*\n{yol_body}\n\n"
+        f"🚗 *Haydovchi ({len(hay)} ta):*\n{hay_body}"
+    )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="➕ Qo'shish",  callback_data="add_keyword"),
-            InlineKeyboardButton(text="🗑 O'chirish", callback_data="del_keyword_list"),
+            InlineKeyboardButton(text="🧍 Yo'lovchi qo'shish", callback_data="add_kw_yolovchi"),
+            InlineKeyboardButton(text="🚗 Haydovchi qo'shish", callback_data="add_kw_haydovchi"),
         ],
-        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="main_menu")],
+        [InlineKeyboardButton(text="🗑 O'chirish", callback_data="del_keyword_list")],
+        [InlineKeyboardButton(text="🔙 Orqaga",   callback_data="main_menu")],
     ])
-    await _edit(cb, f"🔑 *Kalit So'zlar ({len(kws)} ta):*\n\n{body}", kb)
+    await _edit(cb, text, kb)
 
 
-@dp.callback_query(F.data == "add_keyword")
+@dp.callback_query(F.data.in_({"add_kw_yolovchi", "add_kw_haydovchi"}))
 async def cb_add_keyword_start(cb: CallbackQuery, state: FSMContext):
     if not is_admin(cb.from_user.id):
         return
+    kw_type = "yolovchi" if cb.data == "add_kw_yolovchi" else "haydovchi"
     await state.set_state(AddKeyword.waiting)
+    await state.update_data(kw_type=kw_type)
+    icon = "🧍" if kw_type == "yolovchi" else "🚗"
     await _edit(
         cb,
-        "🔑 Kalit so'z(lar)ni yozing:\n\n"
-        "_(bitta: `taksi`)\n"
-        "(bir nechta: `taksi, taxi, haydovchi`)_",
+        f"{icon} *{kw_type.capitalize()}* kalit so'z(lar)ini yozing:\n\n"
+        "_(bitta: `taksi`  |  bir nechta: `taksi, taxi`)_",
         back_kb("keywords"),
     )
 
@@ -129,13 +140,15 @@ async def cb_add_keyword_start(cb: CallbackQuery, state: FSMContext):
 async def msg_add_keyword(msg: Message, state: FSMContext):
     if not is_admin(msg.from_user.id):
         return
+    data = await state.get_data()
+    kw_type = data.get("kw_type", "yolovchi")
     words = [w.strip().lower() for w in msg.text.split(",") if w.strip()]
     if not words:
         await msg.answer("❌ Bo'sh bo'lmaydi!")
         return
     added, exists = [], []
     for kw in words:
-        ok = await add_keyword(kw, msg.from_user.id)
+        ok = await add_keyword(kw, msg.from_user.id, kw_type)
         (added if ok else exists).append(kw)
     if added:
         invalidate_cache()
