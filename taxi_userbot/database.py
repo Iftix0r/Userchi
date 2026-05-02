@@ -6,8 +6,9 @@ async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript("""
             CREATE TABLE IF NOT EXISTS keywords (
-                id      INTEGER PRIMARY KEY AUTOINCREMENT,
-                keyword TEXT UNIQUE NOT NULL,
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                keyword  TEXT UNIQUE NOT NULL,
+                kw_type  TEXT NOT NULL DEFAULT 'yolovchi',
                 added_by INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -23,23 +24,33 @@ async def init_db():
                 value TEXT
             );
         """)
-        await db.commit()
+        # migration: add kw_type to existing databases
+        try:
+            await db.execute("ALTER TABLE keywords ADD COLUMN kw_type TEXT NOT NULL DEFAULT 'yolovchi'")
+            await db.commit()
+        except Exception:
+            pass
 
 
 # ── Keywords ──────────────────────────────────────────────────────────────────
 
-async def get_keywords() -> list[str]:
+async def get_keywords(kw_type: str | None = None) -> list[str]:
     async with aiosqlite.connect(DB_PATH) as db:
+        if kw_type:
+            async with db.execute(
+                "SELECT keyword FROM keywords WHERE kw_type = ? ORDER BY keyword", (kw_type,)
+            ) as cur:
+                return [r[0] for r in await cur.fetchall()]
         async with db.execute("SELECT keyword FROM keywords ORDER BY keyword") as cur:
             return [r[0] for r in await cur.fetchall()]
 
 
-async def add_keyword(keyword: str, added_by: int) -> bool:
+async def add_keyword(keyword: str, added_by: int, kw_type: str = "yolovchi") -> bool:
     async with aiosqlite.connect(DB_PATH) as db:
         try:
             await db.execute(
-                "INSERT INTO keywords (keyword, added_by) VALUES (?, ?)",
-                (keyword.lower().strip(), added_by),
+                "INSERT INTO keywords (keyword, kw_type, added_by) VALUES (?, ?, ?)",
+                (keyword.lower().strip(), kw_type, added_by),
             )
             await db.commit()
             return True

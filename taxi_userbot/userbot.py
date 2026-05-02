@@ -17,18 +17,19 @@ userbot = Client(
     session_string=SESSION_STRING,
 )
 
-_cache: dict = {"keywords": None, "groups": None}
+_cache: dict = {"yolovchi": None, "haydovchi": None, "groups": None}
 
 
 def invalidate_cache() -> None:
-    _cache["keywords"] = None
+    _cache["yolovchi"] = None
+    _cache["haydovchi"] = None
     _cache["groups"] = None
 
 
-async def _cached_keywords() -> list[str]:
-    if _cache["keywords"] is None:
-        _cache["keywords"] = await get_keywords()
-    return _cache["keywords"]
+async def _cached_keywords(kw_type: str) -> list[str]:
+    if _cache[kw_type] is None:
+        _cache[kw_type] = await get_keywords(kw_type)
+    return _cache[kw_type]
 
 
 async def _cached_groups() -> set[int]:
@@ -95,8 +96,12 @@ async def on_group_message(client: Client, message: Message):
     if monitored and message.chat.id not in monitored:
         return
 
-    keywords = await _cached_keywords()
-    if not keywords or not any(kw in raw for kw in keywords):
+    haydovchi_kws = await _cached_keywords("haydovchi")
+    if haydovchi_kws and any(kw in raw for kw in haydovchi_kws):
+        return
+
+    yolovchi_kws = await _cached_keywords("yolovchi")
+    if not yolovchi_kws or not any(kw in raw for kw in yolovchi_kws):
         return
 
     orders_group = await get_setting("orders_group_id")
