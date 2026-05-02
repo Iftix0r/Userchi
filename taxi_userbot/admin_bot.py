@@ -11,7 +11,9 @@ from aiogram.types import (
 )
 
 from config import ADMIN_IDS, BOT_TOKEN
-from userbot import invalidate_cache
+from pyrogram.enums import ChatType
+
+from userbot import invalidate_cache, userbot
 from database import (
     add_keyword,
     add_monitored_group,
@@ -32,9 +34,6 @@ dp = Dispatcher(storage=MemoryStorage())
 class AddKeyword(StatesGroup):
     waiting = State()
 
-
-class AddGroup(StatesGroup):
-    waiting = State()
 
 
 class SetOrdersGroup(StatesGroup):
@@ -196,34 +195,57 @@ async def cb_groups(cb: CallbackQuery):
     await _edit(cb, f"👥 *Kuzatiladigan Guruhlar ({len(groups)} ta):*\n\n{body}", kb)
 
 
+async def _show_group_picker(cb: CallbackQuery):
+    await cb.message.edit_text("⏳ Guruhlar yuklanmoqda...")
+    monitored = {g[0] for g in await get_monitored_groups()}
+    buttons = []
+    async for dialog in userbot.get_dialogs():
+        chat = dialog.chat
+        if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+            continue
+        icon = "✅" if chat.id in monitored else "➕"
+        buttons.append([InlineKeyboardButton(
+            text=f"{icon} {chat.title}",
+            callback_data=f"addgrp_{chat.id}",
+        )])
+    if not buttons:
+        await cb.message.edit_text(
+            "❌ Userbot hech qanday guruhda emas.",
+            reply_markup=back_kb("groups"),
+            parse_mode="Markdown",
+        )
+        return
+    buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="groups")])
+    await cb.message.edit_text(
+        "👥 Kuzatish uchun guruhni tanlang:\n_✅ — allaqachon qo'shilgan_",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+        parse_mode="Markdown",
+    )
+
+
 @dp.callback_query(F.data == "add_group")
 async def cb_add_group_start(cb: CallbackQuery, state: FSMContext):
     if not is_admin(cb.from_user.id):
         return
-    await state.set_state(AddGroup.waiting)
-    await _edit(
-        cb,
-        "👥 Guruh ID sini yozing:\n\n_(masalan: `-1001234567890`)_\n\n"
-        "💡 ID ni bilish uchun userbotni guruhga qo'shing.",
-        back_kb("groups"),
-    )
+    await state.clear()
+    await _show_group_picker(cb)
 
 
-@dp.message(AddGroup.waiting)
-async def msg_add_group(msg: Message, state: FSMContext):
-    if not is_admin(msg.from_user.id):
+@dp.callback_query(F.data.startswith("addgrp_"))
+async def cb_addgrp_select(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
         return
-    try:
-        gid = int(msg.text.strip())
-    except ValueError:
-        await msg.answer("❌ Noto'g'ri format! Raqam kiriting.")
-        return
-    ok = await add_monitored_group(gid, f"Guruh {gid}", msg.from_user.id)
+    gid = int(cb.data[7:])
+    chat = await userbot.get_chat(gid)
+    title = chat.title or f"Guruh {gid}"
+    ok = await add_monitored_group(gid, title, cb.from_user.id)
     if ok:
         invalidate_cache()
-    await state.clear()
-    icon = "✅" if ok else "⚠️ Allaqachon mavjud:"
-    await msg.answer(f"{icon} `{gid}`", reply_markup=main_kb(), parse_mode="Markdown")
+    await cb.answer(
+        f"✅ '{title}' qo'shildi!" if ok else f"⚠️ '{title}' allaqachon mavjud!",
+        show_alert=True,
+    )
+    await _show_group_picker(cb)
 
 
 @dp.callback_query(F.data == "del_group_list")
