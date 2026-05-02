@@ -119,7 +119,9 @@ async def cb_add_keyword_start(cb: CallbackQuery, state: FSMContext):
     await state.set_state(AddKeyword.waiting)
     await _edit(
         cb,
-        "🔑 Yangi kalit so'zni yozing:\n\n_(masalan: `taksi`, `taxi`, `haydovchi`)_",
+        "🔑 Kalit so'z(lar)ni yozing:\n\n"
+        "_(bitta: `taksi`)\n"
+        "(bir nechta: `taksi, taxi, haydovchi`)_",
         back_kb("keywords"),
     )
 
@@ -128,16 +130,23 @@ async def cb_add_keyword_start(cb: CallbackQuery, state: FSMContext):
 async def msg_add_keyword(msg: Message, state: FSMContext):
     if not is_admin(msg.from_user.id):
         return
-    kw = msg.text.strip().lower()
-    if not kw:
+    words = [w.strip().lower() for w in msg.text.split(",") if w.strip()]
+    if not words:
         await msg.answer("❌ Bo'sh bo'lmaydi!")
         return
-    ok = await add_keyword(kw, msg.from_user.id)
-    if ok:
+    added, exists = [], []
+    for kw in words:
+        ok = await add_keyword(kw, msg.from_user.id)
+        (added if ok else exists).append(kw)
+    if added:
         invalidate_cache()
     await state.clear()
-    icon = "✅" if ok else "⚠️ Allaqachon mavjud:"
-    await msg.answer(f"{icon} `{kw}`", reply_markup=main_kb(), parse_mode="Markdown")
+    lines = []
+    if added:
+        lines.append("✅ Qo'shildi: " + ", ".join(f"`{k}`" for k in added))
+    if exists:
+        lines.append("⚠️ Allaqachon mavjud: " + ", ".join(f"`{k}`" for k in exists))
+    await msg.answer("\n".join(lines), reply_markup=main_kb(), parse_mode="Markdown")
 
 
 @dp.callback_query(F.data == "del_keyword_list")
@@ -173,7 +182,8 @@ async def cb_groups(cb: CallbackQuery):
         return
     groups = await get_monitored_groups()
     if groups:
-        body = "\n".join(f"• {g[1] or 'Noma\\'lum'}: `{g[0]}`" for g in groups)
+        unknown = "Noma'lum"
+        body = "\n".join(f"• {g[1] or unknown}: `{g[0]}`" for g in groups)
     else:
         body = "_Guruh qo'shilmagan — barcha guruhlar kuzatiladi._"
     kb = InlineKeyboardMarkup(inline_keyboard=[
