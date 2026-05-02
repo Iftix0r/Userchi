@@ -11,6 +11,7 @@ from aiogram.types import (
 )
 
 from config import ADMIN_IDS, BOT_TOKEN
+from userbot import invalidate_cache
 from database import (
     add_keyword,
     add_monitored_group,
@@ -132,6 +133,8 @@ async def msg_add_keyword(msg: Message, state: FSMContext):
         await msg.answer("❌ Bo'sh bo'lmaydi!")
         return
     ok = await add_keyword(kw, msg.from_user.id)
+    if ok:
+        invalidate_cache()
     await state.clear()
     icon = "✅" if ok else "⚠️ Allaqachon mavjud:"
     await msg.answer(f"{icon} `{kw}`", reply_markup=main_kb(), parse_mode="Markdown")
@@ -156,6 +159,8 @@ async def cb_del_keyword(cb: CallbackQuery):
         return
     kw = cb.data[6:]
     ok = await delete_keyword(kw)
+    if ok:
+        invalidate_cache()
     await cb.answer(f"✅ '{kw}' o'chirildi!" if ok else "❌ Topilmadi!", show_alert=not ok)
     await cb_del_keyword_list(cb)
 
@@ -169,10 +174,8 @@ async def cb_groups(cb: CallbackQuery):
     groups = await get_monitored_groups()
     if groups:
         body = "\n".join(f"• {g[1] or 'Noma\\'lum'}: `{g[0]}`" for g in groups)
-        hint = ""
     else:
         body = "_Guruh qo'shilmagan — barcha guruhlar kuzatiladi._"
-        hint = ""
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="➕ Qo'shish",  callback_data="add_group"),
@@ -180,7 +183,7 @@ async def cb_groups(cb: CallbackQuery):
         ],
         [InlineKeyboardButton(text="🔙 Orqaga", callback_data="main_menu")],
     ])
-    await _edit(cb, f"👥 *Kuzatiladigan Guruhlar ({len(groups)} ta):*\n\n{body}{hint}", kb)
+    await _edit(cb, f"👥 *Kuzatiladigan Guruhlar ({len(groups)} ta):*\n\n{body}", kb)
 
 
 @dp.callback_query(F.data == "add_group")
@@ -206,6 +209,8 @@ async def msg_add_group(msg: Message, state: FSMContext):
         await msg.answer("❌ Noto'g'ri format! Raqam kiriting.")
         return
     ok = await add_monitored_group(gid, f"Guruh {gid}", msg.from_user.id)
+    if ok:
+        invalidate_cache()
     await state.clear()
     icon = "✅" if ok else "⚠️ Allaqachon mavjud:"
     await msg.answer(f"{icon} `{gid}`", reply_markup=main_kb(), parse_mode="Markdown")
@@ -233,6 +238,8 @@ async def cb_del_group(cb: CallbackQuery):
         return
     gid = int(cb.data[7:])
     ok = await remove_monitored_group(gid)
+    if ok:
+        invalidate_cache()
     await cb.answer(f"✅ Guruh o'chirildi!" if ok else "❌ Topilmadi!", show_alert=not ok)
     await cb_del_group_list(cb)
 

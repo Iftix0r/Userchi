@@ -17,6 +17,26 @@ userbot = Client(
     session_string=SESSION_STRING,
 )
 
+_cache: dict = {"keywords": None, "groups": None}
+
+
+def invalidate_cache() -> None:
+    _cache["keywords"] = None
+    _cache["groups"] = None
+
+
+async def _cached_keywords() -> list[str]:
+    if _cache["keywords"] is None:
+        _cache["keywords"] = await get_keywords()
+    return _cache["keywords"]
+
+
+async def _cached_groups() -> set[int]:
+    if _cache["groups"] is None:
+        groups = await get_monitored_groups()
+        _cache["groups"] = {g[0] for g in groups}
+    return _cache["groups"]
+
 
 def _msg_link(chat_id: int, msg_id: int) -> str:
     cid = str(chat_id)
@@ -35,10 +55,12 @@ def _build_text(message: Message) -> str:
         profile_url = f"https://t.me/{user.username}" if user.username else f"tg://user?id={user.id}"
         name_link = f"[{full_name}]({profile_url})"
         username_line = f"👤 **Username:** @{user.username}\n" if user.username else ""
+        phone_line = f"📞 **Telefon:** `{user.phone_number}`\n" if getattr(user, "phone_number", None) else ""
         user_id_val = user.id
     else:
         name_link = "Noma'lum"
         username_line = ""
+        phone_line = ""
         user_id_val = "?"
 
     # ── Message link ──────────────────────────────────────────────────────────
@@ -47,6 +69,7 @@ def _build_text(message: Message) -> str:
     text_link = f"[{short}]({link})" if short else f"[Xabar]({link})"
 
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
+    group_name = chat.title or "Noma'lum"
 
     return (
         f"🚖 **Yangi Zakaz!**\n"
@@ -54,9 +77,10 @@ def _build_text(message: Message) -> str:
         f"👤 **Ismi:** {name_link}\n"
         f"💬 **Xabar:** {text_link}\n"
         f"{username_line}"
+        f"{phone_line}"
         f"🆔 **Chat ID:** `{chat.id}`\n"
         f"👤 **User ID:** `{user_id_val}`\n"
-        f"📍 **Guruh:** {chat.title or 'Noma\\'lum'}\n"
+        f"📍 **Guruh:** {group_name}\n"
         f"🕐 **Vaqt:** {now}"
     )
 
@@ -67,12 +91,11 @@ async def on_group_message(client: Client, message: Message):
     if not raw:
         return
 
-    # Filter by monitored groups if any are configured
-    monitored = await get_monitored_groups()
-    if monitored and message.chat.id not in {g[0] for g in monitored}:
+    monitored = await _cached_groups()
+    if monitored and message.chat.id not in monitored:
         return
 
-    keywords = await get_keywords()
+    keywords = await _cached_keywords()
     if not keywords or not any(kw in raw for kw in keywords):
         return
 

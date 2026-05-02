@@ -18,8 +18,15 @@ async def main():
 
     async with userbot:
         logger.info("Userbot started as: %s", await userbot.get_me())
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        try:
+            await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        finally:
+            await bot.session.close()
+            logger.info("Bot stopped cleanly")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user — exiting")
