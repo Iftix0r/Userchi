@@ -89,24 +89,33 @@ def _build_text(message: Message) -> str:
 @userbot.on_message(filters.group & ~filters.bot)
 async def on_group_message(client: Client, message: Message):
     raw = (message.text or message.caption or "").strip().lower()
+    logger.info("[FILTER] chat=%s | text=%s", message.chat.id, raw[:60])
+
     if not raw:
+        logger.info("[SKIP] bo'sh xabar")
         return
 
     monitored = await _cached_groups()
     if monitored and message.chat.id not in monitored:
+        logger.info("[SKIP] guruh kuzatilmaydi: %s | kuzatilayotganlar: %s", message.chat.id, monitored)
         return
 
     haydovchi_kws = await _cached_keywords("haydovchi")
     if haydovchi_kws and any(kw in raw for kw in haydovchi_kws):
+        logger.info("[SKIP] haydovchi so'zi topildi: %s", raw)
         return
 
     yolovchi_kws = await _cached_keywords("yolovchi")
-    if not yolovchi_kws or not any(kw in raw for kw in yolovchi_kws):
+    if not yolovchi_kws:
+        logger.info("[SKIP] yo'lovchi kalit so'zlar yo'q")
+        return
+    if not any(kw in raw for kw in yolovchi_kws):
+        logger.info("[SKIP] yo'lovchi so'zi topilmadi | so'zlar=%s | xabar=%s", yolovchi_kws, raw)
         return
 
     orders_group = await get_setting("orders_group_id")
     if not orders_group:
-        logger.warning("orders_group_id is not set — skipping forward")
+        logger.warning("[SKIP] orders_group_id o'rnatilmagan")
         return
 
     try:
@@ -116,6 +125,6 @@ async def on_group_message(client: Client, message: Message):
             parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True,
         )
-        logger.info("Order forwarded from chat %s msg %s", message.chat.id, message.id)
+        logger.info("[OK] zakaz yuborildi: chat=%s msg=%s -> %s", message.chat.id, message.id, orders_group)
     except Exception as exc:
-        logger.error("Failed to forward order: %s", exc)
+        logger.error("[ERROR] yuborishda xato: %s", exc)

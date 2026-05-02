@@ -165,11 +165,16 @@ async def msg_add_keyword(msg: Message, state: FSMContext):
 async def cb_del_keyword_list(cb: CallbackQuery):
     if not is_admin(cb.from_user.id):
         return
-    kws = await get_keywords()
-    if not kws:
+    yol = await get_keywords("yolovchi")
+    hay = await get_keywords("haydovchi")
+    if not yol and not hay:
         await cb.answer("Kalit so'zlar yo'q!", show_alert=True)
         return
-    buttons = [[InlineKeyboardButton(text=f"🗑 {k}", callback_data=f"delkw_{k}")] for k in kws]
+    buttons = []
+    for k in yol:
+        buttons.append([InlineKeyboardButton(text=f"🗑 🧍 {k}", callback_data=f"delkw_{k}")])
+    for k in hay:
+        buttons.append([InlineKeyboardButton(text=f"🗑 🚗 {k}", callback_data=f"delkw_{k}")])
     buttons.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="keywords")])
     await _edit(cb, "🗑 O'chirish uchun kalit so'zni tanlang:", InlineKeyboardMarkup(inline_keyboard=buttons))
 
@@ -209,11 +214,14 @@ async def cb_groups(cb: CallbackQuery):
 
 
 async def _show_group_picker(cb: CallbackQuery):
+    import logging
+    log = logging.getLogger(__name__)
     await cb.message.edit_text("⏳ Guruhlar yuklanmoqda...")
     monitored = {g[0] for g in await get_monitored_groups()}
     buttons = []
     async for dialog in userbot.get_dialogs():
         chat = dialog.chat
+        log.info("[DIALOG] title=%s | type=%s | id=%s", chat.title, chat.type, chat.id)
         if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
             continue
         icon = "✅" if chat.id in monitored else "➕"
@@ -221,6 +229,7 @@ async def _show_group_picker(cb: CallbackQuery):
             text=f"{icon} {chat.title}",
             callback_data=f"addgrp_{chat.id}",
         )])
+    log.info("[PICKER] topilgan guruhlar: %d ta", len(buttons))
     if not buttons:
         await cb.message.edit_text(
             "❌ Userbot hech qanday guruhda emas.",
